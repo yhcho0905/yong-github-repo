@@ -12,6 +12,12 @@ spec:
     command:
     - cat
     tty: true
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+  volumes:
+  - name: workspace-volume
+    emptyDir: {}
 """
     }
   }
@@ -24,7 +30,7 @@ spec:
 
   stages {
 
-    stage('Checkout') {
+    stage('Checkout Source') {
       steps {
         checkout scm
       }
@@ -34,12 +40,12 @@ spec:
       steps {
         container('kaniko') {
           sh '''
-            /kaniko/executor \
-              --context=. \
-              --dockerfile=Dockerfile \
-              --destination=${ECR_REPO}:${IMAGE_TAG} \
-              --destination=${ECR_REPO}:latest \
-              --verbosity=info
+          /kaniko/executor \
+            --context=. \
+            --dockerfile=Dockerfile \
+            --destination=${ECR_REPO}:${IMAGE_TAG} \
+            --destination=${ECR_REPO}:latest \
+            --verbosity=info
           '''
         }
       }
@@ -47,20 +53,29 @@ spec:
 
     stage('Update GitOps Repo') {
       steps {
-        sh '''
-        git clone https://github.com/yhcho0905/yong-gitops-demo.git
-        cd yong-gitops-demo/app
-        echo "1"
+        withCredentials([usernamePassword(
+          credentialsId: 'yong-git-token-for-jenkins',
+          usernameVariable: 'GIT_USERNAME',
+          passwordVariable: 'GIT_PASSWORD'
+        )]) {
 
-        sed -i "s|image:.*|image: ${ECR_REPO}:${IMAGE_TAG}|" deployment.yaml
+          sh '''
+          git config --global credential.helper store
+          echo "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com" > ~/.git-credentials
 
-        git config user.name "jenkins"
-        git config user.email "jenkins@example.com"
+          git clone https://github.com/yhcho0905/yong-gitops-demo.git
+          cd yong-gitops-demo/app
 
-        git add deployment.yaml
-        git commit -m "update image ${IMAGE_TAG}"
-        git push
-        '''
+          sed -i "s|image:.*|image: ${ECR_REPO}:${IMAGE_TAG}|" deployment.yaml
+
+          git config user.name "jenkins"
+          git config user.email "jenkins@example.com"
+
+          git add deployment.yaml
+          git commit -m "update image ${IMAGE_TAG}"
+          git push
+          '''
+        }
       }
     }
 
