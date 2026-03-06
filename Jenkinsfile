@@ -29,6 +29,7 @@ pipeline {
         sh """
         git clone https://github.com/yhcho0905/yong-gitops-demo.git
         cd yong-gitops-demo/app
+        echo "1"
 
         sed -i 's|image:.*|image: ${ECR_REPO}:${IMAGE_TAG}|' deployment.yaml
 
